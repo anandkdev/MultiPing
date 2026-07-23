@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "OmniPulse - Multi-Account Aggregator",
+  "version": "1.0.0",
+  "description": "Unified dashboard and real-time alerts for all your email, calendar, and communication accounts.",
+  "permissions": [
+    "identity",
+    "storage",
+    "alarms",
+    "notifications"
+  ],
+  "host_permissions": [
+    "https://*.google.com/*",
+    "https://*.microsoft.com/*",
+    "https://*.office.com/*"
+  ],
+  "action": {
+    "default_popup": "index.html",
+    "default_title": "OmniPulse"
+  },
+  "background": {
+    "service_worker": "src/background/index.ts",
+    "type": "module"
+  }
+}
