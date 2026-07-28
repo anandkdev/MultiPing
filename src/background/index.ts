@@ -2,11 +2,11 @@
 import { getStorage } from '../utils/storage';
 import type { ExtensionAction, ExtensionResponse, StorageSchema } from '../types';
 
-console.log('OmniPulse Background Service Worker initializing...');
+console.log('MultiPing Background Service Worker initializing...');
 
 // Initialize storage when extension is installed or updated
 chrome.runtime.onInstalled.addListener(async (details) => {
-  console.log(`OmniPulse extension event: ${details.reason}`);
+  console.log(`MultiPing extension event: ${details.reason}`);
   
   // Ensure default storage schema is initialized
   const currentStorage = await getStorage();
