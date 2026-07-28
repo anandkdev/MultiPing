@@ -1,5 +1,6 @@
 /// <reference types="chrome" />
 import { useStorage } from "./hooks/useStorage";
+import { sendDesktopNotification } from "./utils/notifications";
 import type { NotificationItem } from "./types";
 
 export default function App() {
@@ -37,6 +38,7 @@ export default function App() {
             : "https://teams.microsoft.com",
     };
 
+    // 1. Persist to storage
     await updateState((prev) => {
       const updatedItems = [newItem, ...prev.items];
       const emails = updatedItems.filter(
@@ -60,6 +62,9 @@ export default function App() {
         },
       };
     });
+
+    // 2. Trigger native OS desktop notification popup HERE
+    sendDesktopNotification(newItem);
   };
 
   // Helper function to reset test data

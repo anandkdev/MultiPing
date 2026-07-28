@@ -14,7 +14,7 @@ export function updateExtensionBadge(count: number): void {
   }
 }
 
-// Initialize storage & badge counter on extension installation or browser startup
+// Initialize storage & badge counter on extension installation
 chrome.runtime.onInstalled.addListener(async (details) => {
   console.log(`MultiPing extension event: ${details.reason}`);
   const currentStorage = await getStorage();
@@ -28,6 +28,19 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
     const newTotal = newValue?.total ?? 0;
     updateExtensionBadge(newTotal);
   }
+});
+
+// Handle Desktop Notification Click Events: Launch Deep Link in New Tab
+chrome.notifications.onClicked.addListener(async (notificationId) => {
+  const currentStorage = await getStorage();
+  const clickedItem = currentStorage.items.find((item) => item.id === notificationId);
+
+  if (clickedItem?.deepLink) {
+    chrome.tabs.create({ url: clickedItem.deepLink }); // Open deep link target
+  }
+
+  // Clear notification card after click
+  chrome.notifications.clear(notificationId);
 });
 
 // Central Message Router for communications from Popup / Content Scripts
