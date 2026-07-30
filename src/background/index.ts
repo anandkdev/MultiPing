@@ -1,5 +1,6 @@
 /// <reference types="chrome" />
 import { getStorage, updateStorage } from '../utils/storage';
+import { openOrFocusTab } from '../utils/tabs';
 import type { ExtensionAction, ExtensionResponse, StorageSchema } from '../types';
 
 console.log('MultiPing Background Service Worker initializing...');
@@ -30,13 +31,13 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
   }
 });
 
-// Handle Desktop Notification Click Events: Launch Deep Link in New Tab
+// Handle Desktop Notification Click Events using Smart Tab Navigation
 chrome.notifications.onClicked.addListener(async (notificationId) => {
   const currentStorage = await getStorage();
   const clickedItem = currentStorage.items.find((item) => item.id === notificationId);
 
   if (clickedItem?.deepLink) {
-    chrome.tabs.create({ url: clickedItem.deepLink }); // Open deep link target
+    await openOrFocusTab(clickedItem.deepLink); // Focus existing tab or create new
   }
 
   // Clear notification card after click
