@@ -14,7 +14,7 @@ export const OAUTH_CONFIG = {
     authUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
   },
   microsoft: {
-    clientId: '', // Azure AD Application Client ID
+    clientId: '36daa2e6-043a-4cb7-aab1-80e6fd16c972', // Azure AD Application Client ID
     scopes: [
       'https://graph.microsoft.com/Mail.Read',
       'https://graph.microsoft.com/Calendars.Read',
