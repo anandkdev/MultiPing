@@ -1,6 +1,7 @@
 /// <reference types="chrome" />
 import { getStorage, updateStorage } from '../utils/storage';
 import { openOrFocusTab } from '../utils/tabs';
+import { setupPollingAlarm, POLLING_ALARM_NAME } from '../utils/alarms';
 import type { ExtensionAction, ExtensionResponse, StorageSchema } from '../types';
 
 console.log('MultiPing Background Service Worker initializing...');
@@ -15,11 +16,35 @@ export function updateExtensionBadge(count: number): void {
   }
 }
 
-// Initialize storage & badge counter on extension installation
+// Immediate Top-Level Initialization (Guarantees alarm registration on SW boot)
+async function initBackground(): Promise<void> {
+  try {
+    const currentStorage = await getStorage();
+    updateExtensionBadge(currentStorage.unreadCounts.total);
+    await setupPollingAlarm(currentStorage.preferences.refreshIntervalMinutes);
+  } catch (err) {
+    console.error('Failed to initialize background worker state:', err);
+  }
+}
+
+// Execute background setup on service worker boot
+initBackground();
+
+// Event listeners for extension install and browser startup
 chrome.runtime.onInstalled.addListener(async (details) => {
   console.log(`MultiPing extension event: ${details.reason}`);
-  const currentStorage = await getStorage();
-  updateExtensionBadge(currentStorage.unreadCounts.total);
+  await initBackground();
+});
+
+chrome.runtime.onStartup.addListener(async () => {
+  await initBackground();
+});
+
+// Periodic Alarm Listener: Trigger background account sync when alarm fires
+chrome.alarms.onAlarm.addListener(async (alarm) => {
+  if (alarm.name === POLLING_ALARM_NAME) {
+    console.log('[MultiPing Alarm] Triggered background sync job...');
+  }
 });
 
 // Real-time Badge Listener: Sync icon badge whenever unread count updates in storage
@@ -37,10 +62,9 @@ chrome.notifications.onClicked.addListener(async (notificationId) => {
   const clickedItem = currentStorage.items.find((item) => item.id === notificationId);
 
   if (clickedItem?.deepLink) {
-    await openOrFocusTab(clickedItem.deepLink); // Focus existing tab or create new
+    await openOrFocusTab(clickedItem.deepLink);
   }
 
-  // Clear notification card after click
   chrome.notifications.clear(notificationId);
 });
 
@@ -93,7 +117,7 @@ async function handleAction(action: ExtensionAction): Promise<unknown> {
     }
 
     case 'SYNC_ACCOUNTS':
-      console.log('Background account polling triggered...');
+      console.log('Background account polling triggered manually...');
       return await getStorage();
 
     case 'REMOVE_ACCOUNT': {

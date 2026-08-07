@@ -17,9 +17,9 @@ export default function App() {
       category,
       title:
         category === "email"
-          ? "QHSSE Project Update Required"
+          ? "Project Update Required"
           : category === "meeting"
-            ? "Architecture Sync Meeting"
+            ? "Sync Meeting"
             : "Direct Message in Teams",
       snippet:
         category === "email"
@@ -79,7 +79,7 @@ export default function App() {
   if (loading) {
     return (
       <div className="w-full h-full bg-slate-900 text-slate-400 flex items-center justify-center text-xs font-mono">
-        Loading OmniPulse state...
+        Loading MultiPing state...
       </div>
     );
   }
