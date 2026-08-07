@@ -3,7 +3,7 @@
 // OAuth Client ID & Scope Configurations (Keys will be populated in Phase 2)
 export const OAUTH_CONFIG = {
   google: {
-    clientId: '', // Google Cloud Console Client ID
+    clientId: '1029228965565-mrrajl9e7k7s2l9df2t7n9rigo2mqfi3.apps.googleusercontent.com', // Google Cloud Console Client ID
     scopes: [
       'https://www.googleapis.com/auth/gmail.readonly',
       'https://www.googleapis.com/auth/calendar.readonly',
