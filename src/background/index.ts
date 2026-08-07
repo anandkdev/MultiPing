@@ -2,23 +2,21 @@
 import { getStorage, updateStorage } from '../utils/storage';
 import { openOrFocusTab } from '../utils/tabs';
 import { setupPollingAlarm, POLLING_ALARM_NAME } from '../utils/alarms';
-import { authenticateGoogle } from '../services/auth';
+import { authenticateGoogle, authenticateMicrosoft } from '../services/auth';
 import { runBackgroundSync } from '../services/sync';
 import type { ExtensionAction, ExtensionResponse, StorageSchema } from '../types';
 
 console.log('MultiPing Background Service Worker initializing...');
 
-// Synchronize Chrome badge counter based on total unread count
 export function updateExtensionBadge(count: number): void {
   if (count > 0) {
     chrome.action.setBadgeText({ text: count > 99 ? '99+' : count.toString() });
-    chrome.action.setBadgeBackgroundColor({ color: '#6366f1' }); // Indigo badge
+    chrome.action.setBadgeBackgroundColor({ color: '#6366f1' });
   } else {
     chrome.action.setBadgeText({ text: '' });
   }
 }
 
-// Immediate Top-Level Initialization
 async function initBackground(): Promise<void> {
   try {
     const currentStorage = await getStorage();
@@ -29,10 +27,8 @@ async function initBackground(): Promise<void> {
   }
 }
 
-// Execute background setup on service worker boot
 initBackground();
 
-// Event listeners for extension install and browser startup
 chrome.runtime.onInstalled.addListener(async (details) => {
   console.log(`MultiPing extension event: ${details.reason}`);
   await initBackground();
@@ -42,7 +38,6 @@ chrome.runtime.onStartup.addListener(async () => {
   await initBackground();
 });
 
-// Periodic Alarm Listener: Executes real-time account polling
 chrome.alarms.onAlarm.addListener(async (alarm) => {
   if (alarm.name === POLLING_ALARM_NAME) {
     console.log('[MultiPing Alarm] Executing background sync job...');
@@ -50,7 +45,6 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
   }
 });
 
-// Real-time Badge Listener
 chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName === 'local' && changes.unreadCounts) {
     const newValue = changes.unreadCounts.newValue as StorageSchema['unreadCounts'] | undefined;
@@ -59,7 +53,6 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
   }
 });
 
-// Handle Notification Clicks
 chrome.notifications.onClicked.addListener(async (notificationId) => {
   const currentStorage = await getStorage();
   const clickedItem = currentStorage.items.find((item) => item.id === notificationId);
@@ -71,7 +64,6 @@ chrome.notifications.onClicked.addListener(async (notificationId) => {
   chrome.notifications.clear(notificationId);
 });
 
-// Central Message Router
 chrome.runtime.onMessage.addListener(
   (
     message: ExtensionAction,
@@ -90,7 +82,6 @@ chrome.runtime.onMessage.addListener(
   }
 );
 
-// Message Action Handler Logic
 async function handleAction(action: ExtensionAction): Promise<unknown> {
   switch (action.type) {
     case 'GET_STATE':
@@ -101,16 +92,20 @@ async function handleAction(action: ExtensionAction): Promise<unknown> {
         const newAccount = await authenticateGoogle();
         await updateStorage((prev) => {
           const filtered = prev.accounts.filter((acc) => acc.id !== newAccount.id);
-          return {
-            ...prev,
-            accounts: [...filtered, newAccount],
-          };
+          return { ...prev, accounts: [...filtered, newAccount] };
         });
-        // Run sync immediately after adding new account
+        await runBackgroundSync();
+        return await getStorage();
+      } else if (action.payload.provider === 'microsoft') {
+        const newAccount = await authenticateMicrosoft();
+        await updateStorage((prev) => {
+          const filtered = prev.accounts.filter((acc) => acc.id !== newAccount.id);
+          return { ...prev, accounts: [...filtered, newAccount] };
+        });
         await runBackgroundSync();
         return await getStorage();
       }
-      throw new Error(`Provider ${action.payload.provider} not yet supported.`);
+      throw new Error(`Provider ${action.payload.provider} not supported.`);
     }
 
     case 'MARK_ITEM_READ': {

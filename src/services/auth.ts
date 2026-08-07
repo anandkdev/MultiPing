@@ -4,7 +4,7 @@ import type { Account } from '../types';
 // OAuth Client ID & Scope Configurations
 export const OAUTH_CONFIG = {
   google: {
-    clientId: '1029228965565-mrrajl9e7k7s2l9df2t7n9rigo2mqfi3.apps.googleusercontent.com', // Google Cloud Console Client ID
+    clientId: 'YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com',
     scopes: [
       'https://www.googleapis.com/auth/gmail.readonly',
       'https://www.googleapis.com/auth/calendar.readonly',
@@ -14,7 +14,7 @@ export const OAUTH_CONFIG = {
     authUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
   },
   microsoft: {
-    clientId: '36daa2e6-043a-4cb7-aab1-80e6fd16c972', // Azure AD Application Client ID
+    clientId: 'YOUR_MICROSOFT_CLIENT_ID', // Configured in Task 21
     scopes: [
       'https://graph.microsoft.com/Mail.Read',
       'https://graph.microsoft.com/Calendars.Read',
@@ -33,7 +33,7 @@ export function getRedirectUri(): string {
 }
 
 /**
- * Interface representing the Google UserInfo response
+ * Interfaces representing Google & Microsoft UserInfo responses
  */
 interface GoogleUserInfo {
   id: string;
@@ -42,8 +42,15 @@ interface GoogleUserInfo {
   picture?: string;
 }
 
+interface MicrosoftUserInfo {
+  id: string;
+  displayName: string;
+  mail?: string;
+  userPrincipalName?: string;
+}
+
 /**
- * Launches WebAuthFlow to authenticate a Google Account and fetches user profile details
+ * Launches WebAuthFlow to authenticate a Google Account
  */
 export async function authenticateGoogle(): Promise<Account> {
   const redirectUri = getRedirectUri();
@@ -53,7 +60,6 @@ export async function authenticateGoogle(): Promise<Account> {
     throw new Error('Google Client ID is missing. Please set it in src/services/auth.ts');
   }
 
-  // Build OAuth authorization URL
   const authParams = new URLSearchParams({
     client_id: clientId,
     response_type: 'token',
@@ -64,7 +70,6 @@ export async function authenticateGoogle(): Promise<Account> {
 
   const fullAuthUrl = `${authUrl}?${authParams.toString()}`;
 
-  // 1. Launch Chrome interactive authentication popup
   const redirectUrl = await new Promise<string>((resolve, reject) => {
     chrome.identity.launchWebAuthFlow(
       {
@@ -85,7 +90,6 @@ export async function authenticateGoogle(): Promise<Account> {
     );
   });
 
-  // 2. Extract access token and expiration from response URL hash fragment
   const urlHash = new URL(redirectUrl).hash.substring(1);
   const params = new URLSearchParams(urlHash);
   const accessToken = params.get('access_token');
@@ -97,7 +101,6 @@ export async function authenticateGoogle(): Promise<Account> {
 
   const expiresAt = Date.now() + (expiresIn ? parseInt(expiresIn, 10) * 1000 : 3600 * 1000);
 
-  // 3. Fetch user profile information using the access token
   const userProfileResponse = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -110,13 +113,91 @@ export async function authenticateGoogle(): Promise<Account> {
 
   const profile: GoogleUserInfo = await userProfileResponse.json();
 
-  // 4. Return formatted Account object
   return {
     id: `google-${profile.id}`,
     email: profile.email,
     displayName: profile.name,
     avatarUrl: profile.picture,
     provider: 'google',
+    status: 'connected',
+    lastSyncedAt: Date.now(),
+    accessToken,
+    expiresAt,
+  };
+}
+
+/**
+ * Launches WebAuthFlow to authenticate a Microsoft Account via Azure AD / Microsoft Graph
+ */
+export async function authenticateMicrosoft(): Promise<Account> {
+  const redirectUri = getRedirectUri();
+  const { clientId, scopes, authUrl } = OAUTH_CONFIG.microsoft;
+
+  if (!clientId || clientId.startsWith('YOUR_MICROSOFT')) {
+    throw new Error('Microsoft Client ID is missing. Please set it in src/services/auth.ts');
+  }
+
+  const authParams = new URLSearchParams({
+    client_id: clientId,
+    response_type: 'token',
+    redirect_uri: redirectUri,
+    scope: scopes.join(' '),
+    prompt: 'select_account',
+  });
+
+  const fullAuthUrl = `${authUrl}?${authParams.toString()}`;
+
+  const redirectUrl = await new Promise<string>((resolve, reject) => {
+    chrome.identity.launchWebAuthFlow(
+      {
+        url: fullAuthUrl,
+        interactive: true,
+      },
+      (responseUrl) => {
+        if (chrome.runtime.lastError || !responseUrl) {
+          reject(
+            new Error(
+              chrome.runtime.lastError?.message ||
+                'Microsoft authentication flow failed or was canceled.'
+            )
+          );
+        } else {
+          resolve(responseUrl);
+        }
+      }
+    );
+  });
+
+  const urlHash = new URL(redirectUrl).hash.substring(1);
+  const params = new URLSearchParams(urlHash);
+  const accessToken = params.get('access_token');
+  const expiresIn = params.get('expires_in');
+
+  if (!accessToken) {
+    throw new Error('Failed to retrieve access token from Microsoft response.');
+  }
+
+  const expiresAt = Date.now() + (expiresIn ? parseInt(expiresIn, 10) * 1000 : 3600 * 1000);
+
+  // Fetch Microsoft user profile using Microsoft Graph API
+  const userProfileResponse = await fetch('https://graph.microsoft.com/v1.0/me', {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+
+  if (!userProfileResponse.ok) {
+    throw new Error('Failed to fetch user profile details from Microsoft Graph API.');
+  }
+
+  const profile: MicrosoftUserInfo = await userProfileResponse.json();
+  const userEmail = profile.mail || profile.userPrincipalName || 'unknown@microsoft.com';
+
+  return {
+    id: `microsoft-${profile.id}`,
+    email: userEmail,
+    displayName: profile.displayName || userEmail,
+    provider: 'microsoft',
     status: 'connected',
     lastSyncedAt: Date.now(),
     accessToken,
