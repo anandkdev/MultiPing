@@ -3,6 +3,7 @@ import { getStorage, updateStorage } from '../utils/storage';
 import { openOrFocusTab } from '../utils/tabs';
 import { setupPollingAlarm, POLLING_ALARM_NAME } from '../utils/alarms';
 import { authenticateGoogle } from '../services/auth';
+import { runBackgroundSync } from '../services/sync';
 import type { ExtensionAction, ExtensionResponse, StorageSchema } from '../types';
 
 console.log('MultiPing Background Service Worker initializing...');
@@ -41,10 +42,11 @@ chrome.runtime.onStartup.addListener(async () => {
   await initBackground();
 });
 
-// Periodic Alarm Listener
+// Periodic Alarm Listener: Executes real-time account polling
 chrome.alarms.onAlarm.addListener(async (alarm) => {
   if (alarm.name === POLLING_ALARM_NAME) {
-    console.log('[MultiPing Alarm] Triggered background sync job...');
+    console.log('[MultiPing Alarm] Executing background sync job...');
+    await runBackgroundSync();
   }
 });
 
@@ -97,15 +99,16 @@ async function handleAction(action: ExtensionAction): Promise<unknown> {
     case 'ADD_ACCOUNT': {
       if (action.payload.provider === 'google') {
         const newAccount = await authenticateGoogle();
-        const updatedStorage = await updateStorage((prev) => {
-          // Avoid duplicate accounts by replacing existing entry if ID matches
+        await updateStorage((prev) => {
           const filtered = prev.accounts.filter((acc) => acc.id !== newAccount.id);
           return {
             ...prev,
             accounts: [...filtered, newAccount],
           };
         });
-        return updatedStorage;
+        // Run sync immediately after adding new account
+        await runBackgroundSync();
+        return await getStorage();
       }
       throw new Error(`Provider ${action.payload.provider} not yet supported.`);
     }
@@ -134,7 +137,8 @@ async function handleAction(action: ExtensionAction): Promise<unknown> {
     }
 
     case 'SYNC_ACCOUNTS':
-      console.log('Background account polling triggered manually...');
+      console.log('Manual account sync triggered...');
+      await runBackgroundSync();
       return await getStorage();
 
     case 'REMOVE_ACCOUNT': {
