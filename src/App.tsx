@@ -1,25 +1,46 @@
 /// <reference types="chrome" />
 import { useStorage } from "./hooks/useStorage";
 import { sendDesktopNotification } from "./utils/notifications";
-import type { NotificationItem } from "./types";
+import type {
+  NotificationItem,
+  ExtensionResponse,
+  StorageSchema,
+} from "./types";
 
 export default function App() {
   const { storage, loading, updateState } = useStorage();
+
+  // Trigger Google OAuth flow via Background Service Worker
+  const handleConnectGoogle = async () => {
+    try {
+      const response: ExtensionResponse<StorageSchema> =
+        await chrome.runtime.sendMessage({
+          type: "ADD_ACCOUNT",
+          payload: { provider: "google" },
+        });
+
+      if (!response.success) {
+        alert(`Google Auth Failed: ${response.error}`);
+      }
+    } catch (err) {
+      console.error("Error connecting Google account:", err);
+      alert("Failed to initiate Google authentication.");
+    }
+  };
 
   // Helper function to inject mock notifications for live UI testing
   const addMockItem = async (category: "email" | "meeting" | "teams_msg") => {
     const newItem: NotificationItem = {
       id: `mock-${Date.now()}`,
-      accountId: "acc-1",
-      accountEmail:
-        category === "teams_msg" ? "work@company.com" : "personal@gmail.com",
+      accountId: storage.accounts[0]?.id || "acc-1",
+      accountEmail: storage.accounts[0]?.email || "user@gmail.com",
       provider: category === "teams_msg" ? "microsoft" : "google",
       category,
       title:
         category === "email"
-          ? "Project Update Required"
+          ? "QHSSE Project Update Required"
           : category === "meeting"
-            ? "Sync Meeting"
+            ? "Architecture Sync Meeting"
             : "Direct Message in Teams",
       snippet:
         category === "email"
@@ -38,7 +59,6 @@ export default function App() {
             : "https://teams.microsoft.com",
     };
 
-    // 1. Persist to storage
     await updateState((prev) => {
       const updatedItems = [newItem, ...prev.items];
       const emails = updatedItems.filter(
@@ -63,11 +83,9 @@ export default function App() {
       };
     });
 
-    // 2. Trigger native OS desktop notification popup HERE
     sendDesktopNotification(newItem);
   };
 
-  // Helper function to reset test data
   const clearAllMockData = async () => {
     await updateState((prev) => ({
       ...prev,
@@ -79,7 +97,7 @@ export default function App() {
   if (loading) {
     return (
       <div className="w-full h-full bg-slate-900 text-slate-400 flex items-center justify-center text-xs font-mono">
-        Loading MultiPing state...
+        Loading OmniPulse state...
       </div>
     );
   }
@@ -91,7 +109,7 @@ export default function App() {
         <div className="flex items-center gap-2">
           <div className="w-3 h-3 rounded-full bg-indigo-500 animate-pulse" />
           <h1 className="text-base font-bold tracking-wide text-indigo-400">
-            OmniPulse
+            MultiPing
           </h1>
         </div>
         <div className="flex items-center gap-2">
@@ -101,8 +119,56 @@ export default function App() {
         </div>
       </header>
 
+      {/* Connected Accounts Section */}
+      <section className="my-2 p-2.5 rounded-lg bg-slate-800/50 border border-slate-800">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+            Connected Accounts ({storage.accounts.length})
+          </span>
+          <button
+            onClick={handleConnectGoogle}
+            className="text-[10px] font-medium bg-indigo-600 hover:bg-indigo-500 text-white px-2.5 py-1 rounded transition flex items-center gap-1"
+          >
+            + Connect Google
+          </button>
+        </div>
+
+        {storage.accounts.length === 0 ? (
+          <p className="text-[11px] text-slate-500 italic">
+            No Google or Microsoft accounts linked yet.
+          </p>
+        ) : (
+          <div className="space-y-1.5">
+            {storage.accounts.map((acc) => (
+              <div
+                key={acc.id}
+                className="flex items-center justify-between text-xs bg-slate-900/80 p-2 rounded border border-slate-700/50"
+              >
+                <div className="flex items-center gap-2 truncate">
+                  {acc.avatarUrl ? (
+                    <img
+                      src={acc.avatarUrl}
+                      alt=""
+                      className="w-4 h-4 rounded-full"
+                    />
+                  ) : (
+                    <span className="text-xs">👤</span>
+                  )}
+                  <span className="font-medium text-slate-200 truncate">
+                    {acc.email}
+                  </span>
+                </div>
+                <span className="text-[9px] bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded uppercase">
+                  Connected
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
       {/* Notification List / Main Body */}
-      <main className="flex-1 my-3 overflow-y-auto space-y-2 pr-1">
+      <main className="flex-1 my-2 overflow-y-auto space-y-2 pr-1">
         {storage.items.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-center p-4">
             <div className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center mb-2 border border-slate-700 text-slate-400">
@@ -148,7 +214,7 @@ export default function App() {
       </main>
 
       {/* Debug Controls Footer */}
-      <footer className="border-t border-slate-800 pt-3 flex flex-col gap-2">
+      <footer className="border-t border-slate-800 pt-2.5 flex flex-col gap-2">
         <div className="grid grid-cols-3 gap-1.5">
           <button
             onClick={() => addMockItem("email")}
