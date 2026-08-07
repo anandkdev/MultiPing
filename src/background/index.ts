@@ -2,6 +2,7 @@
 import { getStorage, updateStorage } from '../utils/storage';
 import { openOrFocusTab } from '../utils/tabs';
 import { setupPollingAlarm, POLLING_ALARM_NAME } from '../utils/alarms';
+import { authenticateGoogle } from '../services/auth';
 import type { ExtensionAction, ExtensionResponse, StorageSchema } from '../types';
 
 console.log('MultiPing Background Service Worker initializing...');
@@ -16,7 +17,7 @@ export function updateExtensionBadge(count: number): void {
   }
 }
 
-// Immediate Top-Level Initialization (Guarantees alarm registration on SW boot)
+// Immediate Top-Level Initialization
 async function initBackground(): Promise<void> {
   try {
     const currentStorage = await getStorage();
@@ -40,14 +41,14 @@ chrome.runtime.onStartup.addListener(async () => {
   await initBackground();
 });
 
-// Periodic Alarm Listener: Trigger background account sync when alarm fires
+// Periodic Alarm Listener
 chrome.alarms.onAlarm.addListener(async (alarm) => {
   if (alarm.name === POLLING_ALARM_NAME) {
     console.log('[MultiPing Alarm] Triggered background sync job...');
   }
 });
 
-// Real-time Badge Listener: Sync icon badge whenever unread count updates in storage
+// Real-time Badge Listener
 chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName === 'local' && changes.unreadCounts) {
     const newValue = changes.unreadCounts.newValue as StorageSchema['unreadCounts'] | undefined;
@@ -56,7 +57,7 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
   }
 });
 
-// Handle Desktop Notification Click Events using Smart Tab Navigation
+// Handle Notification Clicks
 chrome.notifications.onClicked.addListener(async (notificationId) => {
   const currentStorage = await getStorage();
   const clickedItem = currentStorage.items.find((item) => item.id === notificationId);
@@ -68,7 +69,7 @@ chrome.notifications.onClicked.addListener(async (notificationId) => {
   chrome.notifications.clear(notificationId);
 });
 
-// Central Message Router for communications from Popup / Content Scripts
+// Central Message Router
 chrome.runtime.onMessage.addListener(
   (
     message: ExtensionAction,
@@ -83,7 +84,7 @@ chrome.runtime.onMessage.addListener(
           error: err instanceof Error ? err.message : 'Action execution failed',
         })
       );
-    return true; // Keep asynchronous response channel open
+    return true;
   }
 );
 
@@ -92,6 +93,22 @@ async function handleAction(action: ExtensionAction): Promise<unknown> {
   switch (action.type) {
     case 'GET_STATE':
       return await getStorage();
+
+    case 'ADD_ACCOUNT': {
+      if (action.payload.provider === 'google') {
+        const newAccount = await authenticateGoogle();
+        const updatedStorage = await updateStorage((prev) => {
+          // Avoid duplicate accounts by replacing existing entry if ID matches
+          const filtered = prev.accounts.filter((acc) => acc.id !== newAccount.id);
+          return {
+            ...prev,
+            accounts: [...filtered, newAccount],
+          };
+        });
+        return updatedStorage;
+      }
+      throw new Error(`Provider ${action.payload.provider} not yet supported.`);
+    }
 
     case 'MARK_ITEM_READ': {
       const updatedStorage = await updateStorage((prev) => {
